@@ -1,85 +1,110 @@
+#include <Adafruit_GFX.h>
+#include <MCUFRIEND_kbv.h>
+MCUFRIEND_kbv tft;
+#include <TouchScreen.h>
+#define MINPRESSURE 200
+#define MAXPRESSURE 1000
+#include <Fonts/FreeSans9pt7b.h>
+#include <Fonts/FreeSans12pt7b.h>
+#include <Fonts/FreeSerif12pt7b.h>
 
-#include "knob.h"
+#include <FreeDefaultFonts.h>
 
-//UTFT myGLCD(ITDB32S,38,39,40,41);
-knob grafico;
-void setup()
+#define BLACK   0x001F
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+#define fondoPrincipal 0xFFFFFF
+
+// ALL Touch panels and wiring is DIFFERENT
+// copy-paste results from TouchScreen_Calibr_native.ino
+
+const int XP = 7, YP = A2, XM = A1, YM = 6; //ID=0x9341
+const int TS_LEFT = 969, TS_RT = 156, TS_TOP = 885, TS_BOT = 153;
+
+TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
+
+Adafruit_GFX_Button on_btn, off_btn;
+
+int pixel_x, pixel_y;     //Touch_getXY() updates global vars
+bool Touch_getXY(void)
 {
-  grafico = new knob(160, 160, 100, letraSecundaria);
-  randomSeed(analogRead(0));
-  // Setup the LCD
-  myGLCD.InitLCD();
-  myGLCD.setFont(SmallFont);
+    TSPoint p = ts.getPoint();
+    pinMode(YP, OUTPUT);      //restore shared pins
+    pinMode(XM, OUTPUT);
+    digitalWrite(YP, HIGH);   //because TFT control pins
+    digitalWrite(XM, HIGH);
+    bool pressed = (p.z > MINPRESSURE && p.z < MAXPRESSURE);
+    if (pressed) {
+        pixel_x = map(p.x, TS_LEFT, TS_RT, 0, tft.width()); //.kbv makes sense to me
+        pixel_y = map(p.y, TS_TOP, TS_BOT, 0, tft.height());
+    }
+    return pressed;
 }
 
-void loop()
+
+
+void setup(void)
 {
-  int buf[318];
-  int x, x2;
-  int y, y2;
-  int r;
+    Serial.begin(9600);
+    uint16_t ID = tft.readID();
+    Serial.print("TFT ID = 0x");
+    Serial.println(ID, HEX);
+    Serial.println("Calibrate for your Touch Panel");
+    if (ID == 0xD3D3) ID = 0x9486; // write-only shield
+    tft.begin(ID);
+    tft.setRotation(0);            //
+    tft.fillScreen(BLACK);
+    on_btn.initButton(&tft,   60 , 250 , 100, 40, WHITE , CYAN, BLACK, "INICIAR",  2);
+    off_btn.initButton(&tft, 180 , 250 , 100, 40, WHITE , CYAN, BLACK, "OFF", 2);
+    on_btn.drawButton(false);
+    off_btn.drawButton(false);
+    tft.drawCircle(40, 40, 20, RED);
+    knob(40,40,1);
+    showmsgXY(5, 290, 1, &FreeSans9pt7b, " WIRE  BENDING  MACHINE !");
+}
+void showmsgXY(int x, int y, int sz, const GFXfont *f, const char *msg)
+{
+    int16_t x1, y1;
+    uint16_t wid, ht;
+    tft.drawFastHLine(0, y, tft.width(), WHITE);
+    tft.setFont(f);
+    tft.setCursor(x, y);
+    tft.setTextColor(GREEN);
+    tft.setTextSize(sz);
+    tft.print(msg);
+    delay(1000);
+}
 
-  // Clear the screen and draw the frame
-
-  myGLCD.setColor(0, 0, 0);
-  myGLCD.fillRect(1, 15, 318, 224);
-  TouchInit();
-  // Draw some filled, rounded rectangles
-  for (int i = 1; i < 6; i++)
-  {
-    switch (i)
-    {
-      case 1:
-        myGLCD.setColor(255, 0, 255);
-        break;
-      case 2:
-        myGLCD.setColor(255, 0, 0);
-        break;
-      case 3:
-        myGLCD.setColor(0, 255, 0);
-        break;
-      case 4:
-        myGLCD.setColor(0, 0, 255);
-        break;
-      case 5:
-        myGLCD.setColor(255, 255, 0);
-        break;
-    }
-    myGLCD.fillRoundRect(190 - (i * 20), 30 + (i * 20), 250 - (i * 20), 90 + (i * 20));
+void knob(int posx,int posy, int size){
+     tft.drawCircle(posx, posy, 40, MAGENTA);
   }
 
-  delay(2000);
-
-  myGLCD.setColor(0, 0, 0);
-  myGLCD.fillRect(1, 15, 318, 224);
-
-  // Draw some filled circles
-  for (int i = 1; i < 6; i++)
-  {
-    switch (i)
-    {
-      case 1:
-        myGLCD.setColor(255, 0, 255);
-        break;
-      case 2:
-        myGLCD.setColor(255, 0, 0);
-        break;
-      case 3:
-        myGLCD.setColor(0, 255, 0);
-        break;
-      case 4:
-        myGLCD.setColor(0, 0, 255);
-        break;
-      case 5:
-        myGLCD.setColor(255, 255, 0);
-        break;
+/* two buttons are quite simple
+ */
+void loop(void)
+{
+    bool down = Touch_getXY();
+    on_btn.press(down && on_btn.contains(pixel_x, pixel_y));
+    off_btn.press(down && off_btn.contains(pixel_x, pixel_y));
+    
+    if (on_btn.justReleased())
+        on_btn.drawButton();
+        
+    if (off_btn.justReleased())
+        off_btn.drawButton();
+        
+    if (on_btn.justPressed()) {
+        on_btn.drawButton(true);
+        tft.fillCircle(40, 40, 20, GREEN);
     }
-    myGLCD.fillCircle(100 + (i * 20), 60 + (i * 20), 30);
-  }
-
-  delay(2000);
-
-  myGLCD.setColor(0, 0, 0);
-  myGLCD.fillRect(1, 15, 318, 224);
+    if (off_btn.justPressed()) {
+        off_btn.drawButton(true);
+        tft.fillCircle(40, 40, 20, RED);
+    }
 
 }
